@@ -1,0 +1,99 @@
+#include "vex.h"
+
+using namespace vex;
+
+// Pass in the devices we want to use
+Assembly::Assembly(
+    mik::motor_group lift_arm_motors,
+    mik::motor intake_motor, 
+    vex::rotation lift_arm_encoder,
+    mik::piston long_piston
+) :
+    // Assign the ports to the devices
+    lift_arm_motors(lift_arm_motors),
+    intake_motor(intake_motor),
+    lift_arm_encoder(lift_arm_encoder),
+    long_piston(long_piston) // Make sure when using a 3 wire device that isnt mik::piston you convert the port. `to_triport(PORT_A)`.
+{};
+
+// You want to call this function once in the user control function in main.
+void Assembly::init() {
+    // Create the task to move the lift arm. We only want one task to be created
+    lift_task = vex::task([](){
+        //assembly.move_lift_arm();
+        return 0;
+    });
+    // To stop the task do `assembly.lift_task.stop();`
+} 
+
+// You want to put this function inside the user control loop in main.
+void Assembly::control() {
+    lift_arm_control();
+    intake_motors_control();
+    long_piston_control();
+}
+
+void Assembly::move_lift_arm() {
+    // Create a proportional controller. Increase the P just enough so there isn't much oscillation.
+    PID lift_PID(.1, 0, 0);
+    while (true) {
+        // How far we need to move until desired angle
+        float error = lift_arm_position - lift_arm_encoder.angle();
+        // Converting error into motor voltage
+        float output = lift_PID.compute(error);
+        lift_arm_motors.spin(fwd, output, volt);
+        vex::this_thread::sleep_for(20);
+    }
+}
+
+void ButtonL2pressed() {
+    assembly.lift_arm_motors.setVoltage(8, volt);
+    assembly.lift_arm_motors.spinToPosition(350, degrees);
+    while (Controller.ButtonL2.pressing()) {
+        wait(20, msec);
+    }
+    assembly.lift_arm_motors.stop(hold);
+}
+
+void ButtonL1pressed() {
+    assembly.lift_arm_motors.setVoltage(8, volt);
+    assembly.lift_arm_motors.spinToPosition(-175, degrees);
+    while (Controller.ButtonL1.pressing()) {
+        wait(20, msec);
+    }
+    assembly.lift_arm_motors.stop(hold);
+}
+
+void ButtonRightpressed() {
+    assembly.lift_arm_motors.setVoltage(8, volt);
+    assembly.lift_arm_motors.spinToPosition(430, degrees);
+    while (Controller.ButtonRight.pressing()) {
+        wait(20, msec);
+    }
+    assembly.lift_arm_motors.stop(hold);
+}
+
+void Assembly::lift_arm_control() {
+    Controller.ButtonL2.pressed(ButtonL2pressed);
+    Controller.ButtonL1.pressed(ButtonL1pressed);
+    Controller.ButtonRight.pressed(ButtonRightpressed);
+}
+
+// Spins intake forward if L1 is being held, reverse if L2 is being held; stops otherwise
+void Assembly::intake_motors_control() {
+    if (Controller.ButtonR1.pressing()) {
+        intake_motor.spin(fwd, 12, volt);
+    } else if (Controller.ButtonR2.pressing()) {
+        intake_motor.spin(fwd, -12, volt);
+    } else {
+        intake_motor.stop();
+    }
+}
+
+
+// Extends or retracts piston when button A is pressed, can only extend or retract again until button A is released and pressed again
+void Assembly::long_piston_control() {
+    if (btnUp_new_press(Controller.ButtonUp.pressing())) {
+        long_piston.toggle();
+    }
+}
